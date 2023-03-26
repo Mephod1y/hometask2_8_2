@@ -1,39 +1,33 @@
 import pika
-import time
-import json
+from time import sleep
 from pymongo import MongoClient
+from model import Contacts
 
 client = MongoClient("mongodb+srv://user:567234@mongodb.x4pxdoh.mongodb.net/web9")
 db = client.web9
 
-credentials = pika.PlainCredentials('nxivztju','Y-QORi4RdYBDdZpu4hx-c9D7QPEHAKUL')
-connection = pika.BlockingConnection(pika.ConnectionParameters(host='sparrow-01.rmq.cloudamqp.com',port=5672, virtual_host='nxivztju',credentials=credentials))
-channel = connection.channel()
 
-channel.queue_declare(queue='task_queue', durable=True)
-print(' [*] Waiting for messages. To exit press CTRL+C')
+def main():
+    credentials = pika.PlainCredentials('nxivztju', 'Y-QORi4RdYBDdZpu4hx-c9D7QPEHAKUL')
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host='sparrow-01.rmq.cloudamqp.com', port=5672, virtual_host='nxivztju',
+                                  credentials=credentials))
+    channel = connection.channel()
+    channel.queue_declare(queue="send_message")
 
+    def callback(ch, method, properties, body):
+        contacts = Contacts.objects()
+        contact_id = body.decode()
+        contact_email = contacts(id=contact_id)[0].email
+        sleep(1)
+        print(f" [x] Sent message to email: '{contact_email}' with id: {contact_id}")
+        contacts(id=contact_id)[0].update(sent=True)
 
-def callback(ch, method, properties, body):
-    print(f"{ch}, {method}, {properties}, {body}")
-    message = json.loads(body.decode())
-    print(f" [x] Received {message}")
-    time.sleep(1)
+    channel.basic_consume(queue='send_message', on_message_callback=callback, auto_ack=True)
 
-    сontacts = db.contacts.find()
-    for c in сontacts:
-        if c['_id'] == message['id']:
-            print(message['id'])
-            c.logical = 'True'
-            с.save()
-
-    print(f" [x] Done: {method.delivery_tag}")
-    ch.basic_ack(delivery_tag=method.delivery_tag)
-
-
-channel.basic_qos(prefetch_count=1)
-channel.basic_consume(queue='task_queue', on_message_callback=callback)
+    print(' [*] Waiting for user identifiers. To exit press CTRL+C')
+    channel.start_consuming()
 
 
 if __name__ == '__main__':
-    channel.start_consuming()
+    main()
